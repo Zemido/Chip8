@@ -8,7 +8,7 @@ The 'A' key the game uses is in fact the 'Z' on your regular keyboard, see next 
 
 ## Keys layout
 The usual Chip8 Keys layout is like this:
- _ | _ | _ | _ 
+_ | _ | _ | _ 
 --- | --- | --- | ---
 1 | 2 | 3 | C
 4 | 5 | 6 | D
@@ -16,7 +16,7 @@ The usual Chip8 Keys layout is like this:
 A | 0 | B | F
 
 Here the emulator uses the same layout, using the keys from the left side of the keyboard:
- _ | _ | _ | _ 
+_ | _ | _ | _ 
 --- | --- | --- | ---
 1 | 2 | 3 | 4
 Q | W | E | R
