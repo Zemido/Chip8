@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Chip 8</title>
+        <style>
+            #debug table tbody tr td {
+                width: 40px;
+            }
+            #dbgSprite2 {
+                border: 1px solid black;
+            }
+        </style>
+    </head>
+    <body>
+        <form>
+            <button type="button" onclick="start()">Start</button>
+            <button type="button" onclick="togglePause()" id="pauseButton" disabled>Pause</button>
+            <button type="button" onclick="step()" id="stepButton">Step</button>
+            <button type="button" onclick="toggleDebug()" id="debugButton">Toggle Debug</button>
+            <input type="checkbox" checked name="unmute" id="unmute">
+            <label for="unmute" style="user-select: none;">Sound</label>
+        </form>
+        <canvas id="canvas1" width="64" height="32" style="display:none"></canvas>
+        <canvas id="canvas2" width="512" height="256" style="border: solid; background-color: black"></canvas>
+        <audio id="beep" src="beep.wav" loop muted></audio>
+        <!--
+        <div>
+            <span>~</span><span>7</span><span>8</span><span>9</span><span>C</span>
+        </div>
+        <table class="controlTable">
+            <tbody>
+                <tr>
+                    <td>~</td><td>7</td><td>8</td><td>9</td><td>C</td>
+                </tr>
+                <tr>
+                    <td>TAB</td><td>4</td><td>5</td><td>6</td><td>D</td>
+                </tr>
+                <tr>
+                    <td>CAPS</td><td>1</td><td>2</td><td>3</td><td>E</td>
+                </tr>
+                <tr>
+                    <td>SHIFT</td><td>A</td><td>0</td><td>B</td><td>F</td>
+                </tr>
+            </tbody>
+        </table>
+        -->
+        <div id="debug" style="display: none">
+            <table>
+                <thead>
+                    <tr>
+                        <th colspan="6">Register</th>
+                        <th colspan="4">Stack</th>
+                        <th>Sprite</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>V0</td><td class="dbgV">0</td>
+                        <td>V8</td><td class="dbgV">0</td>
+                        <td>I</td><td id="dbgI">0</td>
+                        <td>[0]</td><td class="dbgStack">0</td>
+                        <td>[8]</td><td class="dbgStack">0</td>
+                        <td rowspan="8">
+                            <canvas id="dbgSprite1" width="8" height="15" style="display:none"></canvas>
+                            <canvas id="dbgSprite2" width="40" height="75"></canvas>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>V1</td><td class="dbgV">0</td>
+                        <td>V9</td><td class="dbgV">0</td>
+                        <td>DT</td><td id="dbgDT">0</td>
+                        <td>[1]</td><td class="dbgStack">0</td>
+                        <td>[9]</td><td class="dbgStack">0</td>
+                    </tr>
+                    <tr>
+                        <td>V2</td><td class="dbgV">0</td>
+                        <td>VA</td><td class="dbgV">0</td>
+                        <td>ST</td><td id="dbgST">0</td>
+                        <td>[2]</td><td class="dbgStack">0</td>
+                        <td>[A]</td><td class="dbgStack">0</td>
+                    </tr>
+                    <tr>
+                        <td>V3</td><td class="dbgV">0</td>
+                        <td>VB</td><td class="dbgV">0</td>
+                        <td>PC</td><td id="dbgPC">0</td>
+                        <td>[3]</td><td class="dbgStack">0</td>
+                        <td>[B]</td><td class="dbgStack">0</td>
+                    </tr>
+                    <tr>
+                        <td>V4</td><td class="dbgV">0</td>
+                        <td>VC</td><td class="dbgV">0</td>
+                        <td>SP</td><td id="dbgSP">0</td>
+                        <td>[4]</td><td class="dbgStack">0</td>
+                        <td>[C]</td><td class="dbgStack">0</td>
+                    </tr>
+                    <tr>
+                        <td>V5</td><td class="dbgV">0</td>
+                        <td>VD</td><td class="dbgV">0</td>
+                        <td>K</td><td id="dbgK"></td>
+                        <td>[5]</td><td class="dbgStack">0</td>
+                        <td>[D]</td><td class="dbgStack">0</td>
+                    </tr>
+                    <tr>
+                        <td>V6</td><td class="dbgV">0</td>
+                        <td>VE</td><td class="dbgV">0</td>
+                        <td>OP</td><td id="dbgOP"></td>
+                        <td>[6]</td><td class="dbgStack">0</td>
+                        <td>[E]</td><td class="dbgStack">0</td>
+                    </tr>
+                    <tr>
+                        <td>V7</td><td class="dbgV">0</td>
+                        <td>VF</td><td class="dbgV">0</td>
+                        <td></td><td></td>
+                        <td>[7]</td><td class="dbgStack">0</td>
+                        <td>[F]</td><td class="dbgStack">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <script type="text/javascript" src="c8.js"></script>
+        <script type="text/javascript" src="parser.js"></script>
+        <script type="text/javascript" src="bomber.js"></script>
+        <script type="text/javascript">
+        var beep = document.getElementById("beep");
+        var unmute = document.getElementById("unmute");
+
+        var canvas = document.getElementById("canvas1");
+        var canvas2 = document.getElementById("canvas2");
+        var ctx = canvas.getContext("2d");
+        var ctx2 = canvas2.getContext("2d");
+        ctx2.imageSmoothingEnabled = false;
+
+        var canvasDbg = document.getElementById("dbgSprite1");
+        var canvasDbg2 = document.getElementById("dbgSprite2");
+        var ctxDbg = canvasDbg.getContext("2d");
+        var ctxDbg2 = canvasDbg2.getContext("2d");
+        ctxDbg2.imageSmoothingEnabled = false;
+
+        var keycodes = ["KeyX", "Digit1", "Digit2", "Digit3", "KeyQ", "KeyW", "KeyE",
+            "KeyA", "KeyS", "KeyD", "KeyZ", "KeyC", "Digit4", "KeyR", "KeyF", "KeyV"];
+        var key = -1;
+
+        document.onkeydown = function(e) {
+            key = keycodes.indexOf(e.code);
+        }
+        document.onkeyup = function(e) {
+            key = -1;
+        }
+
+        document.ontouchstart = function(e) {
+            key = 10;
+        }
+        document.ontouchend = function(e) {
+            key = -1;
+        }
+
+        function start() {
+            beep.play();
+            let button = document.getElementById("pauseButton");
+            cpu.start();
+            button.textContent = "Pause";
+            button.disabled = false;
+        }
+
+        function togglePause() {
+            let button = document.getElementById("pauseButton");
+            let buttonStep = document.getElementById("stepButton");
+            if(button.textContent === "Pause") {
+                cpu.pause();
+                button.textContent = "Resume";
+                buttonStep.disabled = false;
+            } else {
+                cpu.resume();
+                button.textContent = "Pause";
+                buttonStep.disabled = true;
+            }
+        }
+
+        function step() {
+            cpu.trueStep();
+        }
+
+        function toggleDebug() {
+            debug = !debug;
+            document.getElementById("debug").style.display = debug ? "block" : "none";
+        }
+
+        var debug = document.getElementById("debug").style.display === "block";
+
+        function sortDbgV(a, b) {
+            return parseInt(a.previousSibling.textContent[1], 16) - parseInt(b.previousSibling.textContent[1], 16);
+        }
+        var dbgV = Array.from(document.getElementsByClassName("dbgV")).sort(sortDbgV);
+        var dbgStack = Array.from(document.getElementsByClassName("dbgStack")).sort(sortDbgV);
+
+        var cpu = new C8_CPU(() => { // refresh 60
+            ctx.putImageData(cpu.screen.toImageData(), 0, 0);
+            ctx2.drawImage(canvas, 0, 0, canvas2.width, canvas2.height);
+        }, () => { // keyboard
+            if(debug) {
+                // Registers
+                dbgV.forEach((dbg, i) => dbg.textContent = cpu.getV(i).toString(16));
+                dbgStack.forEach((dbg, i) => dbg.textContent = cpu.getStack(i).toString(16).padStart(3, "0"));
+                document.getElementById("dbgI").textContent = cpu.getI().toString(16).padStart(3, "0");
+                document.getElementById("dbgDT").textContent = cpu.getDT().toString(16);
+                document.getElementById("dbgST").textContent = cpu.getST().toString(16);
+                document.getElementById("dbgPC").textContent = cpu.getPC().toString(16).padStart(3, "0");
+                document.getElementById("dbgSP").textContent = cpu.getSP().toString(16);
+                document.getElementById("dbgK").textContent = key !== -1 ? key.toString(16).toUpperCase() : "";
+                document.getElementById("dbgOP").textContent = cpu.getOP().toString(16).padStart(4, "0");
+                // Sprite
+                ctxDbg.putImageData(cpu.getRAMSprite().toImageData(), 0, 0);
+                ctxDbg2.drawImage(canvasDbg, 0, 0, canvasDbg2.width, canvasDbg2.height);
+            }
+
+            if(key !== -1) {
+                return key;
+            }
+        }, () => { // play sound
+            beep.muted = false || !unmute.checked;
+        }, () => { // stop sound
+            beep.muted = true;
+        }, parse(bomberPrg).output);
+        </script>
+    </body>
+</html>
