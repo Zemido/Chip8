@@ -8,20 +8,80 @@ The 'A' key the game uses is in fact the 'Z' on your regular keyboard, see next 
 
 ## Keys layout
 The usual Chip8 Keys layout is like this:
-_ | _ | _ | _ 
---- | --- | --- | ---
-1 | 2 | 3 | C
-4 | 5 | 6 | D
-7 | 8 | 9 | E
-A | 0 | B | F
+<table>
+<thead>
+<tr>
+<th>_</th>
+<th>_</th>
+<th>_</th>
+<th>_</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+<td>C</td>
+</tr>
+<tr>
+<td>4</td>
+<td>5</td>
+<td>6</td>
+<td>D</td>
+</tr>
+<tr>
+<td>7</td>
+<td>8</td>
+<td>9</td>
+<td>E</td>
+</tr>
+<tr>
+<td>A</td>
+<td>0</td>
+<td>B</td>
+<td>F</td>
+</tr>
+</tbody>
+</table>
 
 Here the emulator uses the same layout, using the keys from the left side of the keyboard:
-_ | _ | _ | _ 
---- | --- | --- | ---
-1 | 2 | 3 | 4
-Q | W | E | R
-A | S | D | F
-Z | X | C | V
+<table>
+<thead>
+<tr>
+<th>_</th>
+<th>_</th>
+<th>_</th>
+<th>_</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Q</td>
+<td>W</td>
+<td>E</td>
+<td>R</td>
+</tr>
+<tr>
+<td>A</td>
+<td>S</td>
+<td>D</td>
+<td>F</td>
+</tr>
+<tr>
+<td>Z</td>
+<td>X</td>
+<td>C</td>
+<td>V</td>
+</tr>
+</tbody>
+</table>
 
 The emulator is locale agnostic, so it should work with any keyboard layout.
 
