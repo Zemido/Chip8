@@ -1,12 +1,12 @@
 # Chip8
-This is a Chip8 emulator written in Javascript, an example minigame is provided as PoC.
-The overall behavior follows descriptions from [Cowgod's techical reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM).
-The bomber minigame is written in a homemade dialect with some syntactic sugar to help with the editing of new programs, it is explained below. The program is first translated into a regular binary before being fed to the emulator.
+This is a Chip8 emulator written in Javascript, with an example minigame is provided as PoC.
+The overall behavior of the emulator follows the descriptions from [Cowgod's techical reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM).
+The bomber minigame is written in a homemade dialect with some syntactic sugar to help with the editing of new programs, and it is explained below. The program is first translated into a regular binary before being fed to the emulator.
 
 ![Bomber sample game](bomber.gif)
 
 You can try the Bomber minigame directly [here](https://zemido.github.io/Chip8/c8.html).
-The 'A' key the game uses is in fact the 'Z' on your regular keyboard, see next section on the keys layout. Touching the screen will also work on smartphone.
+The 'A' key the game uses is in fact the 'Z' key on your regular QWERTY keyboard, see next section on the keys layout. Touching the screen will also work on smartphone.
 
 ## Keys layout
 The usual Chip8 Keys layout is like this:
