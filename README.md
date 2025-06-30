@@ -3,20 +3,14 @@ This is a Chip8 emulator written in Javascript, an example minigame is provided 
 The overall behavior follows descriptions from [Cowgod's techical reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM).
 The bomber minigame is written in a homemade dialect with some syntactic sugar to help with the editing of new programs, it is explained below. The program is first translated into a regular binary before being fed to the emulator.
 
+![Bomber sample game](bomber.gif)
+
 You can try the Bomber minigame directly [here](https://zemido.github.io/Chip8/c8.html).
 The 'A' key the game uses is in fact the 'Z' on your regular keyboard, see next section on the keys layout. Touching the screen will also work on smartphone.
 
 ## Keys layout
 The usual Chip8 Keys layout is like this:
 <table>
-<thead>
-<tr>
-<th>_</th>
-<th>_</th>
-<th>_</th>
-<th>_</th>
-</tr>
-</thead>
 <tbody>
 <tr>
 <td>1</td>
@@ -47,14 +41,6 @@ The usual Chip8 Keys layout is like this:
 
 Here the emulator uses the same layout, using the keys from the left side of the keyboard:
 <table>
-<thead>
-<tr>
-<th>_</th>
-<th>_</th>
-<th>_</th>
-<th>_</th>
-</tr>
-</thead>
 <tbody>
 <tr>
 <td>1</td>
