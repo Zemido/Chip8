@@ -1,5 +1,5 @@
-# Chip8
-This is a Chip8 emulator written in Javascript, with an example minigame is provided as PoC.
+# [Chip8 Emulator](https://github.com/Zemido/Chip8)
+This is a Chip8 emulator written in Typescript, with an example minigame is provided as PoC.
 The overall behavior of the emulator follows the descriptions from [Cowgod's techical reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM).
 The bomber minigame is written in a homemade dialect with some syntactic sugar to help with the editing of new programs, and it is explained below. The program is first translated into a regular binary before being fed to the emulator.
 
