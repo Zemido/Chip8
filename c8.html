@@ -14,6 +14,10 @@
     </head>
     <body>
         <form>
+            <select id="programSelect" onchange="changeProgram()">
+                <option value="bomberPrg">Bomber</option>
+                <option value="badapplePrg">Bad Apple!!</option>
+            </select>
             <button type="button" onclick="start()">Start</button>
             <button type="button" onclick="togglePause()" id="pauseButton" disabled>Pause</button>
             <button type="button" onclick="step()" id="stepButton">Step</button>
@@ -121,7 +125,12 @@
         <script type="text/javascript" src="c8.js"></script>
         <script type="text/javascript" src="parser.js"></script>
         <script type="text/javascript" src="bomber.js"></script>
+        <script type="text/javascript" src="badapple.js"></script>
         <script type="text/javascript">
+        var programs = {
+            'bomberPrg': bomberPrg,
+            'badapplePrg': badapplePrg
+        };
         var beep = document.getElementById("beep");
         var unmute = document.getElementById("unmute");
 
@@ -194,6 +203,11 @@
         var dbgV = Array.from(document.getElementsByClassName("dbgV")).sort(sortDbgV);
         var dbgStack = Array.from(document.getElementsByClassName("dbgStack")).sort(sortDbgV);
 
+        
+        function changeProgram() {
+            cpu.load(parse(programs[document.getElementById('programSelect').selectedOptions[0].value]).prgout);
+        }
+        
         var cpu = new C8_CPU(() => { // refresh 60
             ctx.putImageData(cpu.screen.toImageData(), 0, 0);
             ctx2.drawImage(canvas, 0, 0, canvas2.width, canvas2.height);
@@ -221,7 +235,12 @@
             beep.muted = false || !unmute.checked;
         }, () => { // stop sound
             beep.muted = true;
-        }, parse(bomberPrg).output);
+        });
+        changeProgram();
+
+        for(const i in customFunctions) {
+            cpu.bindCustom(customFunctions[i], i);
+        }
         </script>
     </body>
 </html>

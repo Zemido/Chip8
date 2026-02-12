@@ -2,11 +2,15 @@ class Surface {
     #pixels: Uint8Array;
     readonly width: number;
     readonly height: number;
+    useBuffer: boolean;
+    #buffer: Uint8Array;
 
     constructor(width: number, height: number, data?: number[] | Uint8Array) {
         this.#pixels = new Uint8Array(width * height);
         this.width = width;
         this.height = height;
+        this.useBuffer = false;
+        this.#buffer = new Uint8Array(width * height);
 
         if(data) {
             this.#pixels = Uint8Array.from(Array.from(data).concat(Array.from(this.#pixels.slice(data.length))));
@@ -43,6 +47,10 @@ class Surface {
         return collision;
     }
 
+    drawBuffer() {
+        this.#buffer = new Uint8Array(this.#pixels);
+    }
+
     scroll(x: number, y: number) {
         x = (x+this.width) % this.width;
         y = (y+this.height) / this.height;
@@ -65,10 +73,11 @@ class Surface {
 
     toImageData(): ImageData {
         let id = new ImageData(this.width, this.height);
+        let array = this.useBuffer ? this.#buffer : this.#pixels;
         for(let i=0; i<id.data.length; i+=4) {
-            id.data[i] = this.#pixels[i/4] * 255;
-            id.data[i+1] = this.#pixels[i/4] * 255;
-            id.data[i+2] = this.#pixels[i/4] * 255;
+            id.data[i] = array[i/4] * 255;
+            id.data[i+1] = array[i/4] * 255;
+            id.data[i+2] = array[i/4] * 255;
             id.data[i+3] = 255;
         }
         return id;
@@ -130,14 +139,14 @@ class C8_CPU {
     protected _SP: Uint8Array;
     protected stack: Uint16Array;
     readonly screen: C8_Screen;
-    protected opcodes: Function[];
-
+    
     public cbRefresh60: Function;
     public cbKeyboard: Function;
     public cbPlaySound: Function;
     public cbStopSound: Function;
-    protected handle60: number;
-    protected handleStep: number;
+    protected cbSYS: Function[];
+    protected handle60?: number;
+    protected handleStep?: number;
 
     constructor(cbRefresh60: Function, cbKeyboard: Function, cbPlaySound: Function, cbStopSound: Function, program?: Uint8Array | number[] | string) {
         this.V = new Uint8Array(16);
@@ -153,61 +162,11 @@ class C8_CPU {
         this.cbKeyboard = cbKeyboard;
         this.cbPlaySound = cbPlaySound;
         this.cbStopSound = cbStopSound;
+        this.cbSYS = [];
 
         /** Set up RAM */
         this.RAM = new Uint8Array(c8_font.concat(Array.from(new Uint8Array(432))));
         this.load(program ? program : []);
-        
-        this.PC = 0x200;
-
-        // Set up opcodes
-        this.opcodes = new Array(0x10000).fill(0).map((val, opcode) => {
-            switch(opcode >> 12) {
-                case 0: return (opcode % 256) === 0xe0 ? this.CLS :
-                    (opcode % 256) === 0xee ? this.RET : this.SYS_addr;
-                case 1: return this.JP_addr;
-                case 2: return this.CALL_addr;
-                case 3: return this.SE_vx_byte;
-                case 4: return this.SNE_vx_byte;
-                case 5: return (opcode % 16) === 0 ? this.SE_vx_vy : this.NOP;
-                case 6: return this.LD_vx_byte;
-                case 7: return this.ADD_vx_byte;
-                case 8: switch(opcode % 16) {
-                    case 0:   return this.LD_vx_vy;
-                    case 1:   return this.OR_vx_vy;
-                    case 2:   return this.AND_vx_vy;
-                    case 3:   return this.XOR_vx_vy;
-                    case 4:   return this.ADD_vx_vy;
-                    case 5:   return this.SUB_vx_vy;
-                    case 6:   return this.SHR_vx_vy;
-                    case 7:   return this.SUBN_vx_vy;
-                    case 0xe: return this.SHL_vx_vy;
-                    default:  return this.NOP;
-                }
-                case 9:   return (opcode % 16) === 0 ? this.SNE_vx_vy : this.NOP;
-                case 0xa: return this.LD_i_addr;
-                case 0xb: return this.JP_v0_addr;
-                case 0xc: return this.RND_vx_byte;
-                case 0xd: return this.DRW_vx_vy_nibble;
-                case 0xe: return (opcode % 256) === 0x9e ? this.SKP_vx :
-                    (opcode % 256) === 0xa1 ? this.SKNP_vx : this.NOP;
-                case 0xf: switch(opcode % 256) {
-                    case 0x7:  return this.LD_vx_dt;
-                    case 0xa:  return this.LD_vx_k;
-                    case 0x15: return this.LD_dt_vx;
-                    case 0x18: return this.LD_st_vx;
-                    case 0x1e: return this.ADD_i_vx;
-                    case 0x29: return this.LD_f_vx;
-                    case 0x33: return this.LD_b_vx;
-                    case 0x55: return this.LD_pi_vx;
-                    case 0x65: return this.LD_vx_pi;
-                    default:   return this.NOP;
-                }
-                default: return this.NOP;
-            }
-        }).map(func => {
-            return func.bind(this)
-        });
     }
 
     load(program: number[] | Uint8Array | string) {
@@ -219,8 +178,9 @@ class C8_CPU {
             }
             program = tmp;
         }
-        this.RAM = new Uint8Array(Array.from(this.RAM).concat(
+        this.RAM = new Uint8Array(Array.from(this.RAM.slice(0,0x200)).concat(
             Array.from(program).concat(Array.from(new Uint8Array(3584 - program.length)))));
+        this.PC = 0x200;
     }
 
     /** Accessors for byte and word values */
@@ -307,16 +267,160 @@ class C8_CPU {
         if(opcode === 0) {
             return;
         }
+        const [addr,x,y,byte,nibble] = [opcode & 0xfff,(opcode>>8) & 0xf,(opcode>>4) & 0xf,opcode & 0xff,opcode & 0xf];
 
-        let entry: Entry = {
-            addr: opcode & 0xfff,
-            vx: (opcode >> 8) & 0xf,
-            vy: (opcode >> 4) & 0xf,
-            byte: opcode & 0xff,
-            nibble: opcode & 0xf
-        };
-
-        this.opcodes[opcode](entry);
+        switch(opcode >> 12) {
+            case 0:
+                switch(addr) {
+                    // 00E0: Clear screen. All pixels are set to black
+                    case 0xe0: this.screen.clear();
+                        break;
+                    // 00EE: Subroutine return
+                    case 0xee: this.PC = this.stack[--this.SP];
+                        break;
+                    // 0nnn: Special routine opcode, usually unused
+                    default: this.cbSYS[addr]();
+                }
+                break;
+            // 1nnn: Set PC to addr
+            case 1: this.PC = (addr & 0xfff) - 2;
+                break;
+            // 2nnn: Subroutine call
+            case 2: this.stack[this.SP++] = this.PC;
+                this.PC = (addr & 0xfff) - 2;
+                break;
+            // 3xkk: Skip next instruction if VX = byte
+            case 3: if(this.V[x] === byte) this.PC += 2;
+                break;
+            // 4xkk: Skip next instruction if VX != byte
+            case 4: if(this.V[x] !== byte) this.PC += 2;
+                break;
+            // 5xy0: Skip next instruction if VX = VY
+            case 5:
+                if(nibble === 0) {
+                    if(this.V[x] === this.V[y]) this.PC += 2;
+                }
+                break;
+            // 6xkk: Set VX = byte
+            case 6: this.V[x] = byte;
+                break;
+            // 7xkk: Set VX = Vx+byte
+            case 7: this.V[x] += byte;
+                break;
+            case 8:
+                let borrow: boolean;
+                switch(nibble) {
+                    // 8xy0: Set VX = VY
+                    case 0: this.V[x] = this.V[y];
+                        break;
+                    // 8xy1: Set VX = VX | VY
+                    case 1: this.V[x] |= this.V[y];
+                        break;
+                    // 8xy2: Set VX = VX & VY
+                    case 2: this.V[x] &= this.V[y];
+                        break;
+                    // 8xy3: Set VX = VX ^ VY
+                    case 3: this.V[x] ^= this.V[y];
+                        break;
+                    // 8xy4: Set VX = VX + VY, VF = carry
+                    case 4:
+                        this.V[x] += this.V[y];
+                        this.V[0xf] = this.V[x] < this.V[y] ? 1 : 0;
+                        break;
+                    // 8xy5: Set VX = VX - VY, VF = NOT borrow
+                    case 5:
+                        borrow = this.V[x] < this.V[y];
+                        this.V[x] -= this.V[y];
+                        this.V[0xf] = borrow ? 0 : 1;
+                        break;
+                    // 8xy6: Set VX = VY >> 1, VF = LSB VY
+                    case 6:
+                        this.V[0xf] = this.V[y] & 1;
+                        this.V[y] >>= 1;
+                        this.V[x] = this.V[y];
+                        break;
+                    // 0xy7: Set VX = VY - VX, VF = NOT borrow
+                    case 7:
+                        borrow = this.V[y] < this.V[x];
+                        this.V[x] = this.V[y] - this.V[x];
+                        this.V[0xf] = borrow ? 0 : 1;
+                        break;
+                    // 8xyE: Set VX = VY << 1, VF = MSB VY
+                    case 0xe:
+                        this.V[0xf] = this.V[y] >> 7;
+                        this.V[y] <<= 1;
+                        this.V[x] = this.V[y];
+                        break;
+                }
+                break;
+            // 9xy0: Skip next instruction if VX != VY
+            case 9:
+                if(nibble === 0) {
+                    if(this.V[x] !== this.V[y]) this.PC += 2;
+                }
+                break;
+            // Annn: Set I = addr
+            case 0xa: this.I = addr;
+                break;
+            // Bnnn: Set PV = V0 + addr
+            case 0xb: this.PC = this.V[0] + addr - 2;
+                break;
+            // Cxkk: Set VX = random[0,255] & byte
+            case 0xc: this.V[x] = (Math.random()*255) & (byte);
+                break;
+            // Dxyn: Draw sprite at RAM[I] to RAM[i+nibble] on screen at (VX,VY). Set VF = collision
+            case 0xd: this.V[0xf] = this.screen.draw(this.V[x],this.V[y],new C8_Sprite(this.RAM.slice(this.I,this.I+nibble))) ? 1 : 0;
+                break;
+            case 0xe:
+                switch(byte) {
+                    // Ex9E: Skip next instruction if KEY = VX
+                    case 0x9e: if(this.cbKeyboard() === this.V[x]) this.PC += 2;
+                        break;
+                    // ExA1: Skip next instruction if KEY != VX
+                    case 0xa1: if(this.cbKeyboard() !== this.V[x]) this.PC += 2;
+                        break;
+                }
+                break;
+            case 0xf:
+                switch(byte) {
+                    // Fx07: Set VX = DT
+                    case 0x07: this.V[x] = this.DT;
+                        break;
+                    // Fx0A: Wait for key press, set VX = KEY
+                    case 0x0a:
+                        let k = this.cbKeyboard();
+                        if(k !== undefined) this.V[x] = k;
+                        else this.PC -= 2;
+                        break;
+                    // Fx15: Set DT = VX
+                    case 0x15: this.DT = this.V[x];
+                        break;
+                    // Fx18: Set ST = VX
+                    case 0x18:
+                        this.ST = this.V[x];
+                        if(this.ST > 0) this.cbPlaySound();
+                        break;
+                    // Fx1E: Set I = I + VX
+                    case 0x1e: this.I += this.V[x];
+                        break;
+                    // Fx29: Set I = sprite(VX)
+                    case 0x29: this.I = 5 * this.V[x];
+                        break;
+                    // Fx33: Set RAM[I], RAM[I+1], RAM[I+2] = BCD(VX)
+                    case 0x33:
+                        this.RAM[this.I] = this.V[x] / 100;
+                        this.RAM[this.I+1] = (this.V[x]/10) % 10;
+                        this.RAM[this.I+2] = this.V[x] % 10;
+                        break;
+                    // Fx55: Set RAM[I .. I+X] = V0 .. VX
+                    case 0x55: for(let i=0; i<=x; i++,this.I++) this.RAM[this.I] = this.V[i];
+                        break;
+                    // Fx65: Set V0 .. VX = RAM[I .. I+X]
+                    case 0x65: for(let i=0; i<=x; i++,this.I++) this.V[i] = this.RAM[this.I];
+                        break;
+                }
+                break;
+            }
         this.PC += 2;
 
         this.cbKeyboard();
@@ -325,7 +429,7 @@ class C8_CPU {
 
     reset() {
         clearTimeout(this.handleStep);
-        cancelAnimationFrame(this.handle60);
+        cancelAnimationFrame(this.handle60 ?? -1);
         this.PC = 0x200;
         this.I = 0;
         this.V.fill(0);
@@ -344,7 +448,7 @@ class C8_CPU {
 
     pause() {
         clearTimeout(this.handleStep);
-        cancelAnimationFrame(this.handle60);
+        cancelAnimationFrame(this.handle60 ?? -1);
     }
 
     resume() {
@@ -356,261 +460,17 @@ class C8_CPU {
         this.refresh60();
         this.step();
         clearTimeout(this.handleStep);
-        cancelAnimationFrame(this.handle60);
+        cancelAnimationFrame(this.handle60 ?? -1);
     }
 
-    /** Opcodes */
-    // ????
-    // Unknown opcode, no action, besides wasting one cycle
-    protected NOP() {
-
-    }
-
-    // 00E0
-    // Clear screen. All pixels are set to black
-    protected CLS() {
-        this.screen.clear();
-    }
-
-    // 00EE
-    // Subroutine return
-    protected RET() {
-        this.PC = this.stack[--this.SP];
-    }
-
-    // 0nnn
-    // Special routine opcode, usually unused
-    protected SYS_addr({addr}: Entry) {
-
-    }
-
-    // 1nnn
-    // Set PC to addr
-    protected JP_addr({addr}: Entry) {
-        this.PC = (addr & 0xfff) - 2;
-    }
-
-    // 2nnn
-    // Subroutine call
-    protected CALL_addr({addr}: Entry) {
-        this.stack[this.SP++] = this.PC;
-        this.PC = (addr & 0xfff) - 2;
-    }
-
-    // 3xkk
-    // Skip next instruction if VX = byte
-    protected SE_vx_byte({vx, byte}: Entry) {
-        if(this.V[vx] === (byte & 0xff)) {
-            this.PC += 2;
+    bindCustom(cb: Function, addr: number) {
+        if(addr === 0xe0 || addr === 0xee) {
+            throw new RangeError("0x00E0 and 0x00EE are reserved existing opcodes")
         }
-    }
-
-    // 4xkk
-    // Skip next instruction if VX != byte
-    protected SNE_vx_byte({vx, byte}: Entry) {
-        if(this.V[vx] !== (byte & 0xff)) {
-            this.PC += 2;
+        if(this.cbSYS[addr]) {
+            console.warn(`Overwrite of existing SYS function at 0x${addr.toString(16)}`);
         }
-    }
-
-    // 5xy0
-    // Skip next instruction if VX = VY
-    protected SE_vx_vy({vx, vy}: Entry) {
-        if(this.V[vx] === this.V[vy]) {
-            this.PC += 2;
-        }
-    }
-
-    // 6xkk
-    // Set VX = byte
-    protected LD_vx_byte({vx, byte}: Entry) {
-        this.V[vx] = byte & 0xff;
-    }
-
-    // 7xkk
-    // Set VX = Vx + byte
-    protected ADD_vx_byte({vx, byte}: Entry) {
-        this.V[vx] += byte & 0xff;
-    }
-
-    // 8xy0
-    // Set VX = VY
-    protected LD_vx_vy({vx, vy}: Entry) {
-        this.V[vx] = this.V[vy];
-    }
-
-    // 8xy1
-    // Set VX = VX | VY
-    protected OR_vx_vy({vx, vy}: Entry) {
-        this.V[vx] |= this.V[vy];
-    }
-
-    // 8xy2
-    // Set VX = VX & VY
-    protected AND_vx_vy({vx, vy}: Entry) {
-        this.V[vx] &= this.V[vy];
-    }
-
-    // 8xy3
-    // Set VX = VX ^ VY
-    protected XOR_vx_vy({vx, vy}: Entry) {
-        this.V[vx] ^= this.V[vy];
-    }
-
-    // 8xy4
-    // Set VX = VX + VY, VF = carry
-    protected ADD_vx_vy({vx, vy}: Entry) {
-        this.V[vx] += this.V[vy];
-        this.V[0xf] = this.V[vx] < this.V[vy] ? 1 : 0;
-    }
-
-    // 8xy5
-    // Set VX = VX - VY, VF = NOT borrow
-    protected SUB_vx_vy({vx, vy}: Entry) {
-        let borrow = this.V[vx] < this.V[vy];
-        this.V[vx] -= this.V[vy];
-        this.V[0xf] = borrow ? 0 : 1;
-    }
-
-    // 8xy6
-    // Set VX = VY >> 1, VF = LSB VY
-    protected SHR_vx_vy({vx, vy}: Entry) {
-        this.V[0xf] = this.V[vy] & 1;
-        this.V[vy] >>= 1;
-        this.V[vx] = this.V[vy];
-    }
-
-    // 8xy7
-    // Set VX = VY - VX, VF = NOT borrow
-    protected SUBN_vx_vy({vx, vy}: Entry) {
-        let borrow = this.V[vy] < this.V[vx];
-        this.V[vx] = this.V[vy] - this.V[vx];
-        this.V[0xf] = borrow ? 0 : 1;
-    }
-
-    // 8xyE
-    // Set VX = VY << 1, VF = MSB VY
-    protected SHL_vx_vy({vx, vy}: Entry) {
-        this.V[0xf] = this.V[vy] >> 7;
-        this.V[vy] <<= 1
-        this.V[vx] = this.V[vy];
-    }
-
-    // 9xy0
-    // Skip next instruction if VX != VY
-    protected SNE_vx_vy({vx, vy}: Entry) {
-        if(this.V[vx] !== this.V[vy]) {
-            this.PC += 2;
-        }
-    }
-
-    // Annn
-    // Set I = addr
-    protected LD_i_addr({addr}: Entry) {
-        this.I = addr;// & 0xfff;
-    }
-
-    // Bnnn
-    // Set PC = V0 + addr
-    protected JP_v0_addr({addr}: Entry) {
-        this.PC = this.V[0] + (addr & 0xfff) - 2;
-    }
-
-    // Cxkk
-    // Set VX = random[0, 255] & byte
-    protected RND_vx_byte({vx, byte}: Entry) {
-        this.V[vx] = (Math.random() * 255) & (byte & 0xff);
-    }
-
-    // Dxyn
-    // Draw sprite at RAM[I] to RAM[i+nibble] on screen at (vx, vy)
-    // Set VF = collision
-    protected DRW_vx_vy_nibble({vx, vy, nibble}: Entry) {
-        this.V[0xf] = this.screen.draw(this.V[vx], this.V[vy], new C8_Sprite(this.RAM.slice(this.I, this.I + nibble))) ? 1 : 0;
-    }
-
-    // Ex9E
-    // Skip next instruction if KEY = VX
-    protected SKP_vx({vx}: Entry) {
-        if(this.cbKeyboard() === this.V[vx]) {
-            this.PC += 2;
-        }
-    }
-
-    // ExA1
-    // Skip next instruction if KEY != VX
-    protected SKNP_vx({vx}: Entry) {
-        if(this.cbKeyboard() !== this.V[vx]) {
-            this.PC += 2;
-        }
-    }
-
-    // Fx07
-    // Set VX = DT
-    protected LD_vx_dt({vx}: Entry) {
-        this.V[vx] = this.DT;
-    }
-
-    // Fx0A
-    // Wait for key press, set VX = KEY
-    protected LD_vx_k({vx}: Entry) {
-        let k = this.cbKeyboard();
-        if(k !== undefined) {
-            this.V[vx] = k;
-        } else {
-            this.PC -= 2;
-        }
-    }
-
-    // Fx15
-    // Set DT = VX
-    protected LD_dt_vx({vx}: Entry) {
-        this.DT = this.V[vx];
-    }
-
-    // Fx18
-    // Set ST = VX
-    protected LD_st_vx({vx}: Entry) {
-        this.ST = this.V[vx];
-        if(this.ST > 0) {
-            this.cbPlaySound();
-        }
-    }
-
-    // Fx1E
-    // Set I = I + VX
-    protected ADD_i_vx({vx}: Entry) {
-        this.I += this.V[vx];
-    }
-
-    // Fx29
-    // Set I = sprite(VX)
-    protected LD_f_vx({vx}: Entry) {
-        this.I = 5 * this.V[vx];
-    }
-
-    // Fx33
-    // Set RAM[I], RAM[I+1], RAM[I+2] = BCD VX
-    protected LD_b_vx({vx}: Entry) {
-        this.RAM[this.I] = this.V[vx] / 100;
-        this.RAM[this.I+1] = (this.V[vx] / 10) % 10;
-        this.RAM[this.I+2] = this.V[vx] % 10;
-    }
-
-    // Fx55
-    // Set RAM[I], ..., RAM[I+X] = V0, ..., VX
-    protected LD_pi_vx({vx}: Entry) {
-        for(let i=0; i<=vx; i++, this.I++) {
-            this.RAM[this.I] = this.V[i];
-        }
-    }
-
-    // Fx65
-    // Set V0, ..., VX = RAM[I], ..., RAM[I+X]
-    protected LD_vx_pi({vx}: Entry) {
-        for(let i=0; i<=vx; i++, this.I++) {
-            this.V[i] = this.RAM[this.I];
-        }
+        this.cbSYS[addr] = cb.bind(this);
     }
 }
 
@@ -652,7 +512,7 @@ class SC8_CPU extends C8_CPU {
     protected EXIT()  {
         this.screen.clear();
         clearTimeout(this.handleStep);
-        cancelAnimationFrame(this.handle60);
+        cancelAnimationFrame(this.handle60 ?? -1);
     }
 
     // 00FE
@@ -720,3 +580,5 @@ const c8_font = [
     0xf0, 0x80, 0xf0, 0x80, 0xf0,
     0xf0, 0x80, 0xf0, 0x80, 0x80,
 ];
+
+const customFunctions: Function[] = [];
