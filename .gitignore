@@ -1,0 +1,6 @@
+imgs
+node_modules
+*.mp4
+*.code-workspace
+*.json
+*.txt

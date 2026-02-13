@@ -11,7 +11,7 @@ customFunctions[0xad] = function() {
 customFunctions[0xcd] = function() {
     const chunk = badappleChunks.shift();
     if(chunk) {
-        this.RAM = new Uint8Array(Array.from(this.RAM.slice(0,600)).concat(chunk));
+        this.RAM = new Uint8Array(Array.from(this.RAM.slice(0,600)).concat(chunk,Array.from({length:4096-600-chunk.length},()=>0)));
     }
 };
 
